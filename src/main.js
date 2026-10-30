@@ -1,4 +1,6 @@
 import "./style.css";
+import { assetIdFor } from "./vna/asset.js";
+import { explain, profileForLevel, profilesFrom } from "./vna/explain.js";
 
 /** @typedef {"tot"|"toddler"|"tween"|"teen"|"techTitan"} T4TLevel */
 
@@ -472,12 +474,83 @@ function countTiers(rows) {
   return { good, ok, help };
 }
 
+/** Index the payload's vna block by asset id. Missing/invalid block -> null (cards render as before). */
+function indexVna(vna) {
+  if (!vna || !Array.isArray(vna.assets)) return null;
+  const by = (list, key) => new Map((list || []).map((x) => [key(x), x]));
+  return {
+    assets: by(vna.assets, (a) => a.id),
+    observations: by(vna.observations, (o) => o.subject?.asset_id),
+    findings: by(vna.findings, (f) => f.subject?.asset_id),
+  };
+}
+
+/**
+ * Progressive T4 explanation for one device, built only from cached VNA objects.
+ * Never fetches; switching level re-renders this from the same evidence.
+ * @returns {HTMLElement | null}
+ */
+function t4Explain(d, vna, level) {
+  try {
+    if (!vna) return null;
+    const assetId = assetIdFor(d);
+    const asset = vna.assets.get(assetId);
+    const observation = vna.observations.get(assetId);
+    if (!asset || !observation) return null;
+    const finding = vna.findings.get(assetId) || null;
+    const chain = profilesFrom(profileForLevel(level));
+    const MORE = { teens: "SHOW TEEN VIEW", techies: "SHOW TECHIE DETAILS" };
+
+    /** @param {number} i @returns {HTMLElement[]} */
+    const layer = (i) => {
+      const v = explain(finding, observation, asset, chain[i]);
+      const kids = [el("p", { className: "t4-body", textContent: v.body })];
+      for (const step of v.drill) {
+        kids.push(
+          el("details", { className: "t4-drill" }, [
+            el("summary", { textContent: step.prompt }),
+            el("p", { textContent: step.text }),
+          ]),
+        );
+      }
+      if (v.facts.length) {
+        kids.push(
+          el("ul", { className: "t4-facts" }, v.facts.map((f) => el("li", { textContent: `${f.k}: ${f.v}` }))),
+        );
+      }
+      if (i + 1 < chain.length) {
+        kids.push(
+          el("details", { className: "t4-more" }, [
+            el("summary", { textContent: MORE[chain[i + 1]] }),
+            ...layer(i + 1),
+          ]),
+        );
+      }
+      return kids;
+    };
+
+    const top = explain(finding, observation, asset, chain[0]);
+    const node = el("details", { className: `t4-explain ${finding ? "has-finding" : "no-finding"}` }, [
+      el("summary", { textContent: top.headline }),
+      ...layer(0),
+    ]);
+    node.dataset.assetId = asset.id;
+    node.dataset.observationId = observation.id;
+    node.dataset.findingId = finding ? finding.id : "";
+    return node;
+  } catch {
+    return null; // explanation unavailable must not break the dashboard
+  }
+}
+
 /**
  * @param {unknown[]} devices
  * @param {LevelCopy} copy
  * @param {LevelSkin} skin
+ * @param {ReturnType<typeof indexVna>} [vna]
+ * @param {T4TLevel} [level]
  */
-function renderLanCards(devices, copy, skin) {
+function renderLanCards(devices, copy, skin, vna = null, level = "toddler") {
   /** @param {Record<string, unknown>} d */
   function row(d) {
     const pingMs =
@@ -594,6 +667,8 @@ function renderLanCards(devices, copy, skin) {
     }
 
     let cardKids;
+    const t4Node = t4Explain(d, vna, level);
+    const t4Kids = t4Node ? [t4Node] : [];
 
     if (skin.cardMode === "micro") {
       const sparkle = authed && snmp ? "Sparkle stickers: ON ✨" : "Sparkle stickers: napping 💤";
@@ -612,6 +687,7 @@ function renderLanCards(devices, copy, skin) {
           el("li", { textContent: copy.factPing(pingLabel) }),
           el("li", { textContent: sparkle }),
         ]),
+        ...t4Kids,
         el("p", {
           className: "status-line",
           textContent: String(d.message || ""),
@@ -641,6 +717,7 @@ function renderLanCards(devices, copy, skin) {
         el("div", { className: "bar-track" }, [barFill(signal, barClass)]),
         el("ul", { className: "facts" }, facts),
         ...extras,
+        ...t4Kids,
         el("p", {
           className: "status-line",
           textContent: String(d.message || ""),
@@ -1057,12 +1134,17 @@ async function mount(root) {
     paintLevelStrip(levelStripUi, level);
     probeHudNode.hidden = !skin.showProbeHud;
     restartHudClock(probeHudRefs.clock, skin.hudClock && skin.showProbeHud);
-    void refresh();
+    // Same evidence, new wording: re-render from the last scan instead of re-probing the LAN.
+    if (lastScan) paintScan(lastScan.payload, lastScan.fetchMs);
+    else void refresh();
   }
 
   const { node: levelNode, ui: levelStripUi } = levelStrip(level, applyLevel);
 
   restartHudClock(probeHudRefs.clock, skin.hudClock && skin.showProbeHud);
+
+  /** @type {{ payload: any; fetchMs: number | null } | null} */
+  let lastScan = null;
 
   async function refresh() {
     statusBar.textContent = copy.statusSweep;
@@ -1070,6 +1152,22 @@ async function mount(root) {
       const t0 = skin.fetchMetaOnScan ? performance.now() : 0;
       const payload = /** @type {any} */ (await fetchDevices());
       const fetchMs = skin.fetchMetaOnScan ? Math.round(performance.now() - t0) : null;
+      lastScan = { payload, fetchMs };
+      paintScan(payload, fetchMs);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      gridWrap.replaceChildren(renderErrorCard(copy, skin, msg));
+      probeHudNode.hidden = true;
+      statusBar.textContent =
+        skin.errorCheatSheet === "none"
+          ? "No rainbow server yet — mentor runs `npm run dev` on MARVIN, then reload."
+          : "No `/api` from this origin — use the Vite Network URL (never file://). See sheet below.";
+    }
+  }
+
+  /** Paint a scan payload at the current level. Never fetches. */
+  function paintScan(payload, fetchMs) {
+    try {
       const iface = typeof payload.iface === "string" ? payload.iface : "?";
       const devices = Array.isArray(payload.devices) ? payload.devices : [];
       const rows = /** @type {Record<string, unknown>[]} */ (devices);
@@ -1081,7 +1179,7 @@ async function mount(root) {
         return;
       }
 
-      gridWrap.replaceChildren(renderLanCards(devices, copy, skin));
+      gridWrap.replaceChildren(renderLanCards(devices, copy, skin, indexVna(payload.vna), level));
       statusBar.textContent = copy.statusOk(
         devices.length,
         iface,

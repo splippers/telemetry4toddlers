@@ -1,0 +1,6 @@
+{
+  "_note": "SYNTHETIC fixtures derived from the shape of /api/devices rows. Not real MARVIN output.",
+  "healthy": { "id": "02:00:00:00:00:01", "ip": "192.0.2.10", "mac": "02:00:00:00:00:01", "iface": "eth0", "neighState": "REACHABLE", "pingMs": 18, "hostname": "example-healthy", "authed": false, "snmp": null, "name": "example-healthy", "tier": "good" },
+  "degraded": { "id": "02:00:00:00:00:02", "ip": "192.0.2.11", "mac": "02:00:00:00:00:02", "iface": "eth0", "neighState": "REACHABLE", "pingMs": 187, "hostname": "example-slow", "authed": false, "snmp": null, "name": "example-slow", "tier": "help" },
+  "unavailable": { "id": "192.0.2.12", "ip": "192.0.2.12", "mac": "", "iface": "eth0", "neighState": "FAILED", "pingMs": null, "hostname": "", "authed": false, "snmp": null, "name": "Mystery pal @ 192.0.2.12", "tier": "help" }
+}

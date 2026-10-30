@@ -654,3 +654,38 @@ html[data-t4t-level="tech-titan"] .footer.footer--envGrid caption,
 html[data-t4t-level="tech-titan"] .footer.footer--envGrid .footer-warm {
   font-family: "Comic Sans MS", "Comic Sans", "Chalkboard SE", sans-serif;
 }
+
+/* T4 explanation (VNA Slice 001): progressive reveal under each card */
+.t4-explain {
+  margin: 0.6rem 0 0.4rem;
+  padding: 0.5rem 0.7rem;
+  border: 0.2rem dashed var(--ink);
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.7);
+}
+.t4-explain > summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+.t4-explain.has-finding > summary::before {
+  content: "⚠ ";
+}
+.t4-body {
+  margin: 0.4rem 0;
+}
+.t4-drill,
+.t4-more {
+  margin: 0.3rem 0 0.3rem 0.6rem;
+}
+.t4-drill > summary,
+.t4-more > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.t4-facts {
+  margin: 0.3rem 0;
+  padding-left: 1.2rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.82rem;
+  word-break: break-all;
+}

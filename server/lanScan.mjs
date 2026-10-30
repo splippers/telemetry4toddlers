@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildVna } from "../src/vna/pipeline.js";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,19 +61,26 @@ async function neighTable(iface) {
   return parseNeighStdout(stdout);
 }
 
-async function pingRttMs(ip) {
+export function parsePingRtt(stdout) {
+  const m = String(stdout).match(/time=([0-9.]+)\s*ms/i);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * One ICMP echo. Keeps what pingRttMs used to throw away: why it failed and when.
+ * @returns {Promise<{ ok: boolean; rttMs: number | null; error?: string; observedAt: string }>}
+ */
+export async function pingProbe(ip, exec = execFileAsync) {
+  const observedAt = new Date().toISOString();
   try {
-    const { stdout } = await execFileAsync(
-      "ping",
-      ["-c", "1", "-W", "1", ip],
-      { maxBuffer: 64 * 1024 },
-    );
-    const m = stdout.match(/time=([0-9.]+)\s*ms/i);
-    if (m) return Number(m[1]);
-  } catch {
-    return null;
+    const { stdout } = await exec("ping", ["-c", "1", "-W", "1", ip], { maxBuffer: 64 * 1024 });
+    const rttMs = parsePingRtt(stdout);
+    if (rttMs == null) return { ok: false, rttMs: null, error: "unparseable_reply", observedAt };
+    return { ok: true, rttMs, observedAt };
+  } catch (e) {
+    const error = e?.code === "ENOENT" ? "ping_unavailable" : e?.code === 1 ? "no_reply" : "ping_error";
+    return { ok: false, rttMs: null, error, observedAt };
   }
-  return null;
 }
 
 async function reverseName(ip) {
@@ -197,8 +205,8 @@ export async function scanLan() {
   const authList = await loadAuthEntries();
 
   const hydrated = await mapWithConcurrency(neigh, 12, async (row) => {
-    const [rttMs, hostname, snmp] = await Promise.all([
-      pingRttMs(row.ip),
+    const [probe, hostname, snmp] = await Promise.all([
+      pingProbe(row.ip),
       reverseName(row.ip),
       (async () => {
         const entry = authForIp(authList, row.ip);
@@ -207,6 +215,7 @@ export async function scanLan() {
       })(),
     ]);
 
+    const rttMs = probe.rttMs;
     const authed = Boolean(snmp && snmp.sysName);
     const pingLabel = rttMs == null ? "NO ANSWER (ping)" : `${rttMs.toFixed(rttMs < 10 ? 2 : 1)} ms`;
 
@@ -231,7 +240,7 @@ export async function scanLan() {
           ? "Stale neighbour — poke with ping to wake."
           : "Neighbour fuzzy — Mentor Tech might need a look-see.";
 
-    return {
+    const device = {
       id: row.mac || row.ip,
       ip: row.ip,
       mac: row.mac,
@@ -253,16 +262,20 @@ export async function scanLan() {
       tier,
       message,
     };
+    return { device, probe };
   });
 
   hydrated.sort((a, b) => {
-    if (a.authed !== b.authed) return a.authed ? -1 : 1;
-    return a.ip.localeCompare(b.ip, undefined, { numeric: true });
+    if (a.device.authed !== b.device.authed) return a.device.authed ? -1 : 1;
+    return a.device.ip.localeCompare(b.device.ip, undefined, { numeric: true });
   });
+
+  const scanId = `marvin:scan:${Date.now().toString(36)}`;
 
   return {
     iface,
     scannedAt: new Date().toISOString(),
-    devices: hydrated,
+    devices: hydrated.map((h) => h.device),
+    vna: buildVna(hydrated, { scanId }),
   };
 }
