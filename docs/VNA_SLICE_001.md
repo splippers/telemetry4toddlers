@@ -37,10 +37,10 @@ tots / teens / techies   (card panel in src/main.js)
 Device rows are unchanged. The response gains one top-level key:
 
 ```text
-vna: { scanId, assets[], observations[], findings[], errors[] }
+vna: { scanId, assets[], observations[], findings[], explanations[], errors[] }
 ```
 
-`errors` lists devices that failed to normalise or validate; they are skipped and the rest of the dashboard is unaffected. If `vna` is missing, cards render exactly as before.
+`explanations` has one entry per asset, `{asset_id, observation_id, finding_id, tots, teens, techies}`, each profile being the output of `explain()`. Non-browser clients (the AR app) use it so wording lives in one place. `errors` lists devices that failed to normalise or validate; they are skipped and the rest of the dashboard is unaffected. If `vna` is missing, cards render exactly as before.
 
 ## Decisions (existing code wins over the spec)
 

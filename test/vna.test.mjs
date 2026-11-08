@@ -158,6 +158,14 @@ test("pipeline: builds from devices, all production_changed=false, bad device is
   assert.equal(vna.observations.length, 3);
   assert.equal(vna.findings.length, 2);
   assert.equal(vna.errors.length, 1);
+  assert.equal(vna.explanations.length, 3);
+  for (const e of vna.explanations) {
+    assert.ok(e.asset_id && e.observation_id);
+    assert.deepEqual([e.tots.profile, e.teens.profile, e.techies.profile], ["tots", "teens", "techies"]);
+    assert.equal(e.tots.refs.observationId, e.observation_id);
+  }
+  const deg = vna.explanations.find((e) => e.finding_id);
+  assert.ok(deg.finding_id.startsWith("finding:"));
   for (const o of [...vna.observations, ...vna.findings]) assert.equal(o.production_changed, false);
 });
 
