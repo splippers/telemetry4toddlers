@@ -12,6 +12,12 @@ const FAILURE_REASON = {
  * @param {{ ok: boolean; rttMs: number | null; error?: string; observedAt: string }} probe
  * @param {{ scanId: string; sourceKind?: string }} ctx
  */
+/** Epoch seconds (whole) for an ISO timestamp, or null if it does not parse. */
+export function epochSeconds(iso) {
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+}
+
 export function toIcmpObservation(asset, probe, ctx) {
   const scanShort = String(ctx.scanId).split(":").pop();
   const assetSlug = asset.id.replace(/^asset:/, "");
@@ -24,6 +30,7 @@ export function toIcmpObservation(asset, probe, ctx) {
     producer: { id: "t4t", type: "collector" },
     source: { kind: ctx.sourceKind || "live", id: ctx.scanId },
     observed_at: probe.observedAt,
+    observedAt: epochSeconds(probe.observedAt),     // additive: same instant as observed_at, in epoch seconds
     type: "network.icmp.rtt",
     subject: { type: "asset", asset_id: asset.id },
     method: { type: "icmp_echo", count: 1, timeout_ms: 1000 },

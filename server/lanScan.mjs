@@ -272,9 +272,11 @@ export async function scanLan() {
 
   const scanId = `marvin:scan:${Date.now().toString(36)}`;
 
+  const now = new Date();
   return {
     iface,
-    scannedAt: new Date().toISOString(),
+    scannedAt: now.toISOString(),
+    generatedAt: Math.floor(now.getTime() / 1000),     // additive: epoch seconds, for "updated N s ago"
     devices: hydrated.map((h) => h.device),
     vna: buildVna(hydrated, { scanId }),
   };

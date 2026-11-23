@@ -191,3 +191,29 @@ test("probe: pingProbe classifies outcomes via injected exec", async () => {
   const weird = await pingProbe("x", async () => ({ stdout: "garbage" }));
   assert.equal(weird.error, "unparseable_reply");
 });
+
+import { createScanCache } from "../server/scanCache.mjs";
+import { epochSeconds } from "../src/vna/observation.js";
+
+test("epochSeconds converts an ISO instant and rejects junk", () => {
+  assert.equal(epochSeconds("2026-11-23T12:00:00.900Z"), 1795435200);
+  assert.equal(epochSeconds("nope"), null);
+});
+
+test("scan cache serves the last good scan without rescanning per read", async () => {
+  let calls = 0;
+  const cache = createScanCache(async () => ({ n: ++calls }), { intervalMs: 60000, log: () => {} });
+  assert.deepEqual(await cache.get(), { n: 1 });     // first read waits for the first scan
+  assert.deepEqual(await cache.get(), { n: 1 });
+  assert.deepEqual(await cache.get(), { n: 1 });
+  assert.equal(calls, 1);
+  cache.stop();
+});
+
+test("scan cache keeps the stale scan when a later scan fails, and errors only if it never had one", async () => {
+  let calls = 0;
+  const bad = createScanCache(async () => { throw new Error("boom"); }, { log: () => {} });
+  await assert.rejects(bad.get(), /boom/);
+  const flaky = createScanCache(async () => { if (++calls > 1) throw new Error("later"); return { ok: calls }; }, { log: () => {} });
+  assert.deepEqual(await flaky.get(), { ok: 1 });
+});

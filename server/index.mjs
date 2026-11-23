@@ -4,9 +4,14 @@
  */
 import http from "node:http";
 import { dispatchApiRoutes, pathnameOnly } from "./httpApi.mjs";
+import { scanLan } from "./lanScan.mjs";
+import { createScanCache } from "./scanCache.mjs";
 
 const API_PORT = Number(process.env.T4T_API_PORT || 8788);
 const API_HOST = process.env.T4T_API_HOST || "0.0.0.0";
+// T4T_SCAN_INTERVAL_S > 0: scan in the background and serve the cached last scan, so polling never triggers a scan.
+const SCAN_INTERVAL_S = Number(process.env.T4T_SCAN_INTERVAL_S || 0);
+const scanCache = SCAN_INTERVAL_S > 0 ? createScanCache(scanLan, { intervalMs: SCAN_INTERVAL_S * 1000 }) : null;
 
 const server = http.createServer((req, res) => {
   const p = pathnameOnly(req.url || "/");
@@ -22,6 +27,7 @@ const server = http.createServer((req, res) => {
   dispatchApiRoutes(req, res, {
     source: "standalone-tcp",
     portHint: API_PORT,
+    scanCache,
   }).catch((e) => {
     try {
       res.statusCode = 500;
@@ -37,6 +43,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(API_PORT, API_HOST, () => {
+  scanCache?.start();
   const url = `http://${API_HOST === "0.0.0.0" ? "0.0.0.0" : API_HOST}:${API_PORT}`;
   // eslint-disable-next-line no-console
   console.error(

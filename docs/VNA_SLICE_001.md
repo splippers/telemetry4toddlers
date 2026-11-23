@@ -42,6 +42,10 @@ vna: { scanId, assets[], observations[], findings[], explanations[], errors[] }
 
 `explanations` has one entry per asset, `{asset_id, observation_id, finding_id, tots, teens, techies}`, each profile being the output of `explain()`. Non-browser clients (the AR app) use it so wording lives in one place. `errors` lists devices that failed to normalise or validate; they are skipped and the rest of the dashboard is unaffected. If `vna` is missing, cards render exactly as before.
 
+### Time fields and the standing service
+
+`/api/devices` also carries top-level `generatedAt` (epoch seconds) and each observation an additive `observedAt` (epoch seconds, same instant as `observed_at`). The standalone API (`node server/index.mjs`) can serve a cached scan: set `T4T_SCAN_INTERVAL_S=30` and it scans in the background and every GET returns the last good scan, so polling never triggers a scan. On MARVIN it runs as `t4t-api.service` (user jon, `T4T_API_HOST=192.168.1.2`, port 8788, ufw LAN-only, `CAP_NET_RAW` for ping, restart on failure), from `~/t4t` there. Update it with `rsync` then `sudo systemctl restart t4t-api`.
+
 ## Decisions (existing code wins over the spec)
 
 - **The one rule** (`evaluate.js`): RTT of 160 ms or more gives `network.response.degraded`. No reply gives `network.response.unavailable`. Anything else gives no Finding. 160 ms is the existing "help" boundary in `tierFromPing`.

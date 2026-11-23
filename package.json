@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "preview:live": "vite preview --host 0.0.0.0",
-    "test": "node --test test/"
+    "test": "node --test"
   },
   "dependencies": {
     "net-snmp": "^3.26.0"

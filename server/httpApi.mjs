@@ -27,7 +27,7 @@ function json(res, code, body) {
   res.end(data);
 }
 
-/** @typedef {{ source?: string; portHint?: number }} ApiCtx */
+/** @typedef {{ source?: string; portHint?: number; scanCache?: { get(): Promise<object> } }} ApiCtx */
 
 /**
  * Handle /api/*. Always ends `res`.
@@ -68,7 +68,7 @@ export async function dispatchApiRoutes(req, res, ctx = {}) {
 
   if (pathname === "/api/devices") {
     try {
-      const payload = await scanLan();
+      const payload = ctx.scanCache ? await ctx.scanCache.get() : await scanLan();
       json(res, 200, payload);
     } catch (e) {
       json(res, 500, {
